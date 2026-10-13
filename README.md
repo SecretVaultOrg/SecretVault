@@ -553,7 +553,7 @@ SecureVault/
 ### 1. Clone & Setup Workspace
 
 ```bash
-git clone https://github.com/Hrushi4151/SecretVault.git
+git clone https://github.com/SecretVaultOrg/SecretVault.git
 cd SecretVault
 cp .env.example .env
 ```
@@ -771,7 +771,7 @@ We welcome contributions from the open-source community!
 
 **Built with ❤️ for DevSecOps, Cloud Engineers, and Security Teams**
 
-[![GitHub Stars](https://img.shields.io/github/stars/Hrushi4151/SecretVault?style=social)](https://github.com/Hrushi4151/SecretVault)
+[![GitHub Stars](https://img.shields.io/github/stars/SecretVaultOrg/SecretVault?style=social)](https://github.com/SecretVaultOrg/SecretVault)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 </div>
