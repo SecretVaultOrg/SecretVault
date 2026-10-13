@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export const RegisterScreen = ({ onNavigateToLogin }) => {
+export const RegisterScreen = ({ onNavigateToLogin, onNavigateToHome, onNavigateToDocs }) => {
   const { verifyRegistrationOtp, isLoading, error, clearError } = useAuth();
   const [step, setStep] = useState(1); // 1: Enter details -> 2: Verify OTP
   const [fullName, setFullName] = useState('');
@@ -161,6 +161,26 @@ export const RegisterScreen = ({ onNavigateToLogin }) => {
 
       {/* Main Glass Card */}
       <div className="relative w-full max-w-lg rounded-2xl bg-[#30000F]/95 backdrop-blur-2xl border border-[#FFB4C8]/25 p-8 shadow-2xl shadow-black/90 flex flex-col gap-6 z-10 animate-fade-in">
+        {onNavigateToHome && (
+          <div className="flex items-center justify-between pb-2 border-b border-[#FFB4C8]/10 text-xs font-mono">
+            <button
+              type="button"
+              onClick={onNavigateToHome}
+              className="text-[#F4B5C8] hover:text-white flex items-center gap-1.5 transition-colors bg-transparent border-none cursor-pointer p-0"
+            >
+              <span>← Back to Home</span>
+            </button>
+            {onNavigateToDocs && (
+              <button
+                type="button"
+                onClick={onNavigateToDocs}
+                className="text-cyan-400 hover:text-cyan-300 transition-colors bg-transparent border-none cursor-pointer p-0"
+              >
+                Docs
+              </button>
+            )}
+          </div>
+        )}
         {/* Header */}
         <div className="flex flex-col items-center text-center gap-3">
           <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-[#3F0016] border border-[#FF2D6D]/40 shadow-inner shadow-black">

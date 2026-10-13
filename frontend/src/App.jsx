@@ -7,6 +7,16 @@ import { AppShell } from './components/layout/AppShell';
 import { WorkspaceOverview } from './components/workspace/WorkspaceOverview';
 import { MfaSuggestionModal } from './components/auth/MfaSuggestionModal';
 import { MfaEnrollmentModal } from './components/settings/mfa/MfaEnrollmentModal';
+import { LandingPage } from './components/landing/LandingPage';
+import { DocsPage } from './components/docs/DocsPage';
+import { FeaturesPage } from './components/public/FeaturesPage';
+import { IntegrationsPage } from './components/public/IntegrationsPage';
+import { ArchitecturePage } from './components/public/ArchitecturePage';
+import { SecurityPage } from './components/public/SecurityPage';
+import { AboutPage } from './components/public/AboutPage';
+import { ChangelogPage } from './components/public/ChangelogPage';
+import { FaqPage } from './components/public/FaqPage';
+import { useRouter } from './utils/router';
 import { Shield, Loader2 } from 'lucide-react';
 
 // Route-level code-splitting for non-critical views
@@ -38,7 +48,23 @@ const ViewLoader = () => (
 
 const MainRouter = () => {
   const { isAuthenticated, isLoading, user, justRegistered, setJustRegistered } = useAuth();
-  const [authView, setAuthView] = useState('login'); // 'login' | 'register' | 'mfa'
+  const {
+    currentPath,
+    navigate,
+    isDocs,
+    isLanding,
+    isFeatures,
+    isIntegrations,
+    isArchitecture,
+    isSecurity,
+    isAbout,
+    isChangelog,
+    isFaq,
+    isLogin,
+    isRegister,
+    isApp
+  } = useRouter();
+  
   const [mfaChallengeId, setMfaChallengeId] = useState(null);
   const [currentTab, setCurrentTab] = useState('dashboard'); // 'dashboard' | 'projects' | 'secrets' | 'rotation' | 'access' | 'integrations' | 'sync-center' | 'settings'
   const [targetProjectId, setTargetProjectId] = useState(null);
@@ -90,34 +116,94 @@ const MainRouter = () => {
     );
   }
 
-  if (!isAuthenticated) {
-    if (authView === 'register') {
-      return <RegisterScreen onNavigateToLogin={() => setAuthView('login')} />;
+  // Public Marketing & Documentation Routes
+  if (isFeatures) {
+    return <FeaturesPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isIntegrations) {
+    return <IntegrationsPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isArchitecture) {
+    return <ArchitecturePage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isSecurity) {
+    return <SecurityPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isAbout) {
+    return <AboutPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isChangelog) {
+    return <ChangelogPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  if (isFaq) {
+    return <FaqPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  // Documentation Portal
+  if (isDocs) {
+    return <DocsPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  // Marketing Landing Page
+  if (isLanding) {
+    return <LandingPage isAuthenticated={isAuthenticated} user={user} />;
+  }
+
+  // Route 3: Register Screen
+  if (isRegister) {
+    if (isAuthenticated) {
+      navigate('/app', { replace: true });
     }
-    if (authView === 'mfa') {
+    return (
+      <RegisterScreen
+        onNavigateToLogin={() => navigate('/login')}
+        onNavigateToHome={() => navigate('/')}
+        onNavigateToDocs={() => navigate('/docs')}
+      />
+    );
+  }
+
+  // Route 4: Login Screen / MFA Challenge
+  if (isLogin || (!isAuthenticated && isApp)) {
+    if (isAuthenticated) {
+      navigate('/app', { replace: true });
+    }
+    if (mfaChallengeId) {
       return (
         <MfaChallengeScreen
           challengeId={mfaChallengeId}
           onBackToLogin={() => {
             setMfaChallengeId(null);
-            setAuthView('login');
+            navigate('/login');
           }}
           onSuccess={() => {
             setMfaChallengeId(null);
-            setAuthView('login');
+            navigate('/app');
           }}
         />
       );
     }
     return (
       <LoginScreen
-        onNavigateToRegister={() => setAuthView('register')}
+        onNavigateToRegister={() => navigate('/register')}
         onNavigateToMfa={(challengeId) => {
           setMfaChallengeId(challengeId);
-          setAuthView('mfa');
         }}
+        onNavigateToHome={() => navigate('/')}
+        onNavigateToDocs={() => navigate('/docs')}
       />
     );
+  }
+
+  // Route 5: Authenticated Workspace App
+  if (!isAuthenticated) {
+    return <LandingPage isAuthenticated={false} user={null} />;
   }
 
   return (

@@ -32,8 +32,11 @@ import {
   Settings,
   Sliders,
   ChevronRight,
+  BookOpen,
+  Home,
 } from 'lucide-react';
 import { NotificationCenterModal } from '../notification/NotificationCenterModal';
+import { navigate } from '../../utils/router';
 
 export const AppShell = ({ children, activeTab = 'dashboard', onSelectTab }) => {
   const { user, activeWorkspace, logout, refreshWorkspaces, switchWorkspace } = useAuth();
@@ -124,6 +127,18 @@ export const AppShell = ({ children, activeTab = 'dashboard', onSelectTab }) => 
       label: 'Vault Settings',
       icon: <Settings className="w-4 h-4 text-[#FF85A2]" />,
       action: () => onSelectTab && onSelectTab('settings'),
+    },
+    {
+      id: 'docs',
+      label: 'Documentation',
+      icon: <BookOpen className="w-4 h-4 text-cyan-400" />,
+      action: () => navigate('/docs'),
+    },
+    {
+      id: 'landing',
+      label: 'SecretVault Home',
+      icon: <Home className="w-4 h-4 text-emerald-400" />,
+      action: () => navigate('/'),
     },
   ];
 
