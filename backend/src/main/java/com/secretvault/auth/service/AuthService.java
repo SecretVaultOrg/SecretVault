@@ -373,6 +373,12 @@ public class AuthService {
             return;
         }
 
+        String otp = String.format("%06d", secureRandom.nextInt(1_000_000));
+        String otpHash = passwordEncoder.encode(otp);
+        String resetToken = UUID.randomUUID().toString().replace("-", "");
+        boolean mfaRequired = mfaService != null && mfaService.isMfaEnabled(user.getId());
+        Instant expiresAt = Instant.now().plusSeconds(900); // 15 minutes
+
         com.secretvault.auth.entity.PasswordResetToken token = passwordResetTokenRepository.findByEmail(normalizedEmail)
                 .orElseGet(() -> new com.secretvault.auth.entity.PasswordResetToken());
 

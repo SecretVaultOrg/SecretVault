@@ -37,7 +37,7 @@ public class GeminiLlmProvider implements LlmProvider {
 
     public GeminiLlmProvider(
             @Value("${secretvault.ai.gemini.base-url:${AI_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}}") String baseUrl,
-            @Value("${secretvault.ai.gemini.model:${AI_GEMINI_MODEL:gemini-3.5-flash-lite}}") String modelName,
+            @Value("${secretvault.ai.gemini.model:${AI_GEMINI_MODEL:gemini-3.5-flash}}") String modelName,
             @Value("${secretvault.ai.gemini.api-key:${AI_GEMINI_API_KEY:${GEMINI_API_KEY:}}}") String apiKey,
             @Value("${secretvault.ai.gemini.timeout-seconds:60}") int timeoutSeconds,
             @Value("${secretvault.ai.gemini.temperature:0.1}") double defaultTemperature,
@@ -46,7 +46,7 @@ public class GeminiLlmProvider implements LlmProvider {
         this.baseUrl = baseUrl != null ? baseUrl.replaceAll("/+$", "") : "https://generativelanguage.googleapis.com";
         this.modelName = modelName != null && !modelName.isBlank()
                 ? modelName.trim().toLowerCase().replace("models/", "")
-                : "gemini-3.5-flash-lite";
+                : "gemini-3.5-flash";
 
         String resolvedKey = apiKey != null ? apiKey.trim() : "";
         if (resolvedKey.isBlank()) {
@@ -81,114 +81,153 @@ public class GeminiLlmProvider implements LlmProvider {
         }
 
         long start = System.currentTimeMillis();
-        try {
-            Map<String, Object> payload = buildGeminiPayload(request);
-            String requestBody = objectMapper.writeValueAsString(payload);
-
-            String endpointUrl = String.format("%s/v1beta/models/%s:generateContent?key=%s", baseUrl, modelName, apiKey);
-
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(endpointUrl))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            long latency = System.currentTimeMillis() - start;
-
-            if (response.statusCode() != 200) {
-                int status = response.statusCode();
-                String errSummary = "HTTP " + status;
-                try {
-                    JsonNode errNode = objectMapper.readTree(response.body());
-                    if (errNode.has("error") && errNode.get("error").has("message")) {
-                        errSummary = errNode.get("error").get("message").asText();
-                    }
-                } catch (Exception ignored) {
-                }
-
-                if (status == 401 || status == 403) {
-                    throw new IllegalStateException("GEMINI_AUTH_ERROR: Invalid or unauthorized Gemini API key (" + errSummary + ")");
-                } else if (status == 404) {
-                    throw new IllegalStateException("GEMINI_MODEL_NOT_FOUND: Model '" + modelName + "' not found on Gemini API (" + errSummary + ")");
-                } else if (status == 429) {
-                    throw new IllegalStateException("GEMINI_RATE_LIMIT_EXCEEDED: Rate limit reached on Gemini API (" + errSummary + ")");
-                } else if (status >= 500) {
-                    throw new IllegalStateException("GEMINI_SERVICE_UNAVAILABLE: Google Generative Language service error (" + errSummary + ")");
-                } else {
-                    throw new IllegalStateException("GEMINI_API_ERROR: HTTP " + status + " - " + errSummary);
-                }
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            JsonNode candidatesNode = root.path("candidates");
-            if (!candidatesNode.isArray() || candidatesNode.isEmpty()) {
-                throw new IllegalStateException("Gemini API returned no response candidates");
-            }
-
-            JsonNode firstCandidate = candidatesNode.get(0);
-            JsonNode contentParts = firstCandidate.path("content").path("parts");
-
-            StringBuilder textResponse = new StringBuilder();
-            List<AiToolCall> toolCalls = new ArrayList<>();
-
-            if (contentParts.isArray()) {
-                for (JsonNode part : contentParts) {
-                    if (part.has("text")) {
-                        textResponse.append(part.path("text").asText(""));
-                    }
-                    if (part.has("functionCall")) {
-                        JsonNode funcCall = part.path("functionCall");
-                        String rawToolName = funcCall.path("name").asText();
-                        // Map underscore function names back to canonical dot format if applicable
-                        String toolName = rawToolName.replace("_", ".");
-                        Map<String, Object> args = new HashMap<>();
-                        JsonNode argsNode = funcCall.path("args");
-                        if (argsNode.isObject()) {
-                            argsNode.fields().forEachRemaining(entry -> {
-                                if (entry.getValue().isTextual())
-                                    args.put(entry.getKey(), entry.getValue().asText());
-                                else if (entry.getValue().isNumber())
-                                    args.put(entry.getKey(), entry.getValue().numberValue());
-                                else if (entry.getValue().isBoolean())
-                                    args.put(entry.getKey(), entry.getValue().asBoolean());
-                                else
-                                    args.put(entry.getKey(), entry.getValue().toString());
-                            });
-                        }
-                        String thoughtSig = null;
-                        if (part.has("thoughtSignature")) {
-                            thoughtSig = part.get("thoughtSignature").asText();
-                        } else if (part.has("thought_signature")) {
-                            thoughtSig = part.get("thought_signature").asText();
-                        } else if (funcCall.has("thoughtSignature")) {
-                            thoughtSig = funcCall.get("thoughtSignature").asText();
-                        } else if (funcCall.has("thought_signature")) {
-                            thoughtSig = funcCall.get("thought_signature").asText();
-                        }
-                        toolCalls.add(new AiToolCall("gemini_call_" + System.nanoTime(), toolName, args, null, thoughtSig));
-                    }
-                }
-            }
-
-            int promptTokens = root.path("usageMetadata").path("promptTokenCount").asInt(0);
-            int candidateTokens = root.path("usageMetadata").path("candidatesTokenCount")
-                    .asInt(textResponse.length() / 4);
-
-            return new LlmResponse(
-                    textResponse.toString(),
-                    0.96,
-                    promptTokens + candidateTokens,
-                    latency,
-                    PROVIDER_NAME,
-                    modelName,
-                    toolCalls,
-                    toolCalls.isEmpty());
-        } catch (Exception e) {
-            log.error("Gemini LLM invocation failed: {}", e.getMessage());
-            throw new RuntimeException("Gemini provider failure: " + e.getMessage(), e);
+        List<String> modelsToAttempt = new ArrayList<>();
+        modelsToAttempt.add(this.modelName);
+        if (!"gemini-3.6-flash".equalsIgnoreCase(this.modelName)) {
+            modelsToAttempt.add("gemini-3.6-flash");
         }
+        if (!"gemini-3.5-flash".equalsIgnoreCase(this.modelName)) {
+            modelsToAttempt.add("gemini-3.5-flash");
+        }
+        if (!"gemini-3.8-flash".equalsIgnoreCase(this.modelName)) {
+            modelsToAttempt.add("gemini-3.8-flash");
+        }
+
+        Exception lastException = null;
+        for (int i = 0; i < modelsToAttempt.size(); i++) {
+            String currentModel = modelsToAttempt.get(i);
+            boolean hasNextModel = (i < modelsToAttempt.size() - 1);
+            try {
+                Map<String, Object> payload = buildGeminiPayload(request);
+                String requestBody = objectMapper.writeValueAsString(payload);
+
+                String endpointUrl = String.format("%s/v1beta/models/%s:generateContent?key=%s", baseUrl, currentModel, apiKey);
+
+                HttpRequest httpRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(endpointUrl))
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(timeoutSeconds))
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+                long latency = System.currentTimeMillis() - start;
+
+                if (response.statusCode() != 200) {
+                    int status = response.statusCode();
+                    String errSummary = "HTTP " + status;
+                    try {
+                        JsonNode errNode = objectMapper.readTree(response.body());
+                        if (errNode.has("error") && errNode.get("error").has("message")) {
+                            errSummary = errNode.get("error").get("message").asText();
+                        }
+                    } catch (Exception ignored) {
+                    }
+
+                    if (status == 401 || status == 403) {
+                        throw new IllegalStateException("GEMINI_AUTH_ERROR: Invalid or unauthorized Gemini API key (" + errSummary + ")");
+                    }
+
+                    if (hasNextModel && (status >= 500 || status == 429 || status == 404)) {
+                        log.warn("Gemini model [{}] failed with HTTP {} ({}); falling back to alternative model [{}]...",
+                                currentModel, status, errSummary, modelsToAttempt.get(i + 1));
+                        continue;
+                    }
+
+                    if (status == 404) {
+                        throw new IllegalStateException("GEMINI_MODEL_NOT_FOUND: Model '" + currentModel + "' not found on Gemini API (" + errSummary + ")");
+                    } else if (status == 429) {
+                        throw new IllegalStateException("GEMINI_RATE_LIMIT_EXCEEDED: Rate limit reached on Gemini API (" + errSummary + ")");
+                    } else if (status >= 500) {
+                        throw new IllegalStateException("GEMINI_SERVICE_UNAVAILABLE: Google Generative Language service error (" + errSummary + ")");
+                    } else {
+                        throw new IllegalStateException("GEMINI_API_ERROR: HTTP " + status + " - " + errSummary);
+                    }
+                }
+
+                JsonNode root = objectMapper.readTree(response.body());
+                JsonNode candidatesNode = root.path("candidates");
+                if (!candidatesNode.isArray() || candidatesNode.isEmpty()) {
+                    throw new IllegalStateException("Gemini API returned no response candidates");
+                }
+
+                JsonNode firstCandidate = candidatesNode.get(0);
+                JsonNode contentParts = firstCandidate.path("content").path("parts");
+
+                StringBuilder textResponse = new StringBuilder();
+                List<AiToolCall> toolCalls = new ArrayList<>();
+
+                if (contentParts.isArray()) {
+                    for (JsonNode part : contentParts) {
+                        if (part.has("text")) {
+                            textResponse.append(part.path("text").asText(""));
+                        }
+                        if (part.has("functionCall")) {
+                            JsonNode funcCall = part.path("functionCall");
+                            String rawToolName = funcCall.path("name").asText();
+                            String toolName = rawToolName.replace("_", ".");
+                            Map<String, Object> args = new HashMap<>();
+                            JsonNode argsNode = funcCall.path("args");
+                            if (argsNode.isObject()) {
+                                argsNode.fields().forEachRemaining(entry -> {
+                                    if (entry.getValue().isTextual())
+                                        args.put(entry.getKey(), entry.getValue().asText());
+                                    else if (entry.getValue().isNumber())
+                                        args.put(entry.getKey(), entry.getValue().numberValue());
+                                    else if (entry.getValue().isBoolean())
+                                        args.put(entry.getKey(), entry.getValue().asBoolean());
+                                    else
+                                        args.put(entry.getKey(), entry.getValue().toString());
+                                });
+                            }
+                            String thoughtSig = null;
+                            if (part.has("thoughtSignature")) {
+                                thoughtSig = part.get("thoughtSignature").asText();
+                            } else if (part.has("thought_signature")) {
+                                thoughtSig = part.get("thought_signature").asText();
+                            } else if (funcCall.has("thoughtSignature")) {
+                                thoughtSig = funcCall.get("thoughtSignature").asText();
+                            } else if (funcCall.has("thought_signature")) {
+                                thoughtSig = funcCall.get("thought_signature").asText();
+                            }
+                            toolCalls.add(new AiToolCall("gemini_call_" + System.nanoTime(), toolName, args, null, thoughtSig));
+                        }
+                    }
+                }
+
+                int promptTokens = root.path("usageMetadata").path("promptTokenCount").asInt(0);
+                int candidateTokens = root.path("usageMetadata").path("candidatesTokenCount")
+                        .asInt(textResponse.length() / 4);
+
+                return new LlmResponse(
+                        textResponse.toString(),
+                        0.96,
+                        promptTokens + candidateTokens,
+                        latency,
+                        PROVIDER_NAME,
+                        currentModel,
+                        toolCalls,
+                        toolCalls.isEmpty());
+            } catch (IllegalStateException e) {
+                if (e.getMessage().contains("GEMINI_AUTH_ERROR")) {
+                    throw new RuntimeException("Gemini provider failure: " + e.getMessage(), e);
+                }
+                lastException = e;
+                if (!hasNextModel) {
+                    throw new RuntimeException("Gemini provider failure: " + e.getMessage(), e);
+                }
+            } catch (Exception e) {
+                lastException = e;
+                if (!hasNextModel) {
+                    log.error("Gemini LLM invocation failed on all candidate models: {}", e.getMessage());
+                    throw new RuntimeException("Gemini provider failure: " + e.getMessage(), e);
+                }
+                log.warn("Gemini model [{}] invocation failed: {}; falling back to [{}]...",
+                        currentModel, e.getMessage(), modelsToAttempt.get(i + 1));
+            }
+        }
+
+        throw new RuntimeException("Gemini provider failure: " + (lastException != null ? lastException.getMessage() : "All models exhausted"));
     }
 
     private Map<String, Object> buildGeminiPayload(LlmRequest request) {

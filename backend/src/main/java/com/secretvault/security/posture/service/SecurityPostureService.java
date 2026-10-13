@@ -120,6 +120,7 @@ public class SecurityPostureService {
     }
 
     private SecurityPostureResponse computePosture(UUID workspaceId) {
+        com.secretvault.security.risk.service.RiskAssessmentEngine.RiskAssessmentResult risk = riskAssessmentEngine.computeRisk(workspaceId);
 
         long openCount = findingRepository.countByWorkspaceIdAndStatusIn(workspaceId, UNRESOLVED_STATUSES);
         long criticalCount = findingRepository.countByWorkspaceIdAndSeverityAndStatusIn(workspaceId, FindingSeverity.CRITICAL, UNRESOLVED_STATUSES);
